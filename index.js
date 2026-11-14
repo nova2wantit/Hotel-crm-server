@@ -1,10 +1,11 @@
 const express = require('express');
+const cors = require('cors');
 const { DatabaseSync } = require('node:sqlite');
 
 const app = express();
 const db = new DatabaseSync('hotel.db');
 
-// lets the server read JSON sent by forms
+app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
@@ -38,6 +39,30 @@ app.post('/enquiries', (req, res) => {
   const saved = db.prepare('SELECT * FROM enquiries WHERE id = ?').get(result.lastInsertRowid);
   res.status(201).json(saved);
 });
+
+app.patch('/enquiries/:id', (req, res) => {
+  const id = Number(req.params.id);
+
+  const allowed = ['name', 'phone', 'source', 'status', 'check_in', 'check_out', 'guests', 'room', 'follow_up', 'notes'];
+  const fields = Object.keys(req.body).filter((key) => allowed.includes(key));
+
+  if (fields.length === 0) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+
+  const setClause = fields.map((f) => `${f} = ?`).join(', ');
+  const values = fields.map((f) => (req.body[f] === '' ? null : req.body[f]));
+
+  const result = db.prepare(`UPDATE enquiries SET ${setClause} WHERE id = ?`).run(...values, id);
+
+  if (result.changes === 0) {
+    return res.status(404).json({ error: 'Enquiry not found' });
+  }
+
+  const updated = db.prepare('SELECT * FROM enquiries WHERE id = ?').get(id);
+  res.json(updated);
+});
+
 app.delete('/enquiries/:id', (req, res) => {
   const id = Number(req.params.id);
   const result = db.prepare('DELETE FROM enquiries WHERE id = ?').run(id);
@@ -47,6 +72,7 @@ app.delete('/enquiries/:id', (req, res) => {
   }
   res.json({ deleted: id });
 });
+
 app.listen(3000, () => {
   console.log('Server listening on port 3000');
 });
